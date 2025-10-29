@@ -217,37 +217,38 @@
 
 <script>
 /* ==========================================================
-   TRANSFORMATION PLAN  –  Heyflow-safe script (v2)
+   TRANSFORMATION PLAN – Heyflow-safe script (force-counting)
    ========================================================== */
 
-/* ---------------- TEXT / STATE CONFIG ---------------- */
 let hftStep = 1;
 
 const hftPopupContent = {
-  1: { t: "Aby kontynuować, proszę określić",
-       m: "Czy jesteś zdeterminowany, aby w końcu zatrzymać wypadanie włosów?" },
-  2: { t: "Aby kontynuować, proszę określić",
-       m: "Czy wiedziałeś, że stres i genetyka to jedne z największych czynników powodujących wypadanie włosów?" },
-  3: { t: "Aby kontynuować, proszę określić",
-       m: "Czy prostsza, skuteczna rutyna pielęgnacji włosów brzmi dla Ciebie dobrze?" }
+  1: { t: "Para continuar, por favor indica",
+       m: "¿Estás decidido a detener por fin la caída del cabello?" },
+  2: { t: "Para continuar, por favor indica",
+       m: "¿Sabías que el estrés y la genética son dos de los mayores factores que causan la caída del cabello?" },
+  3: { t: "Para continuar, por favor indica",
+       m: "¿Te parece bien una rutina de cuidado del cabello más simple y eficaz?" }
 };
 
 const hftStepLabels = {
-  1: { load: "Ustalanie celów…",                         done: "Cele" },
-  2: { load: "Ocenianie odpowiedzi dotyczących stylu życia…",  done: "Indywidualne dopasowanie" },
-  3: { load: "Optymalizowanie wyboru produktów…",              done: "Wybrane niezbędniki" }
+  1: { load: "Establecimiento de objetivos…",                 done: "Objetivos" },
+  2: { load: "Evaluando respuestas sobre el estilo de vida…", done: "Ajuste individual" },
+  3: { load: "Optimizando la selección de productos…",        done: "Esenciales seleccionados" }
 };
 
-/* ---------------- HELPERS ---------------- */
+function qs(id){ return document.getElementById(id); }
+
+/* Show only steps up to current step */
 function hftShowSteps () {
   for (let i = 1; i <= 3; i++) {
-    const stepEl = document.getElementById(`step-${i}`);
-    const lblEl  = document.getElementById(`label-${i}`);
-    const bar    = document.getElementById(`bar-${i}`);
+    const stepEl = qs(`step-${i}`);
+    const lblEl  = qs(`label-${i}`);
+    const bar    = qs(`bar-${i}`);
 
     if (i <= hftStep) {
       stepEl.classList.add('hft-show');
-      if (bar.style.width !== '100%') {
+      if (bar.getAttribute('data-pct') !== '100') {
         lblEl.textContent = hftStepLabels[i].load;
       }
     } else {
@@ -256,112 +257,121 @@ function hftShowSteps () {
   }
 }
 
-/* Smooth, exact +1 counting (no skips) */
-function hftFillBar (id, target, cb, stepDelayMs = 20) {
+/* Internal: set percent synchronously and record it */
+function setPct(barEl, pct) {
+  const pctLbl = qs(barEl.id.replace('bar', 'percent'));
+  const clamped = Math.max(0, Math.min(100, pct|0));
+  // disable CSS transition to avoid lag/freezing
+  barEl.style.transition = 'none';
+  barEl.style.width = clamped + '%';
+  barEl.setAttribute('data-pct', String(clamped));
+  pctLbl.style.display = '';
+  pctLbl.textContent = clamped + '%';
+}
+
+/* Animate bar by +1% steps, showing every number */
+function hftFillBar (barId, target, cb, stepDelayMs = 20) {
   hftShowSteps();
 
-  const bar    = document.getElementById(id);
-  const pctLbl = document.getElementById(id.replace('bar', 'percent'));
-  const lbl    = document.getElementById(id.replace('bar', 'label'));
-  const tgt    = parseInt(target, 10);
+  const bar    = qs(barId);
+  const pctLbl = qs(barId.replace('bar', 'percent'));
+  const lbl    = qs(barId.replace('bar', 'label'));
+  const tgt    = Math.max(0, Math.min(100, parseInt(target,10)));
 
-  // Start from current width if any; fall back to 0
-  const start = parseInt((bar.style.width || '0').replace('%', ''), 10) || 0;
-  let cur = start;
+  // current from data attribute (fallback to inline width/0)
+  let cur = parseInt(bar.getAttribute('data-pct') || '0', 10);
+  if (isNaN(cur)) {
+    cur = parseInt((bar.style.width || '0').replace('%',''), 10) || 0;
+  }
 
-  // Ensure label visible while animating
-  pctLbl.style.display = '';
-  pctLbl.textContent = `${cur}%`;
+  // in case the bar never initialized
+  setPct(bar, cur);
 
   function tick () {
     if (cur >= tgt) {
-      // done for this stage
       if (tgt === 100) {
         lbl.textContent = hftStepLabels[hftStep].done;
-        pctLbl.textContent = "";          // hide number
-        pctLbl.style.display = "none";    // hide overlay
+        const checkIcon = qs(`check-${hftStep}`);
+        if (checkIcon) checkIcon.style.display = 'inline';
       }
-      if (cb) setTimeout(cb, 1500);
+      if (typeof cb === 'function') setTimeout(cb, 200);
       return;
     }
-
-    cur += 1;                              // exact +1 increment
-    bar.style.width = `${cur}%`;
-    pctLbl.textContent = `${cur}%`;
-
+    cur += 1;
+    setPct(bar, cur);
     setTimeout(tick, stepDelayMs);
   }
 
-  // Kick off counting
   setTimeout(tick, stepDelayMs);
 }
 
 function hftShowPopup () {
-  const pop      = document.getElementById('hft-popup');
-  const { t, m } = hftPopupContent[hftStep];
+  const pop      = qs('hft-popup');
+  const { t, m } = hftPopupContent[hftStep] || {t:'', m:''};
   pop.querySelector('.hft-popup-title').textContent = t;
   pop.querySelector('.hft-popup-msg').textContent   = m;
   pop.style.display = 'flex';
 }
 
 function hftHidePopup () {
-  document.getElementById('hft-popup').style.display = 'none';
+  qs('hft-popup').style.display = 'none';
 }
 
+/* After user clicks Yes/No: continue same step 51→100 (no jump) */
 function hftHandleResponse () {
   hftHidePopup();
 
-  /* mark current step complete instantly */
-  document.getElementById(`bar-${hftStep}`).style.width = '100%';
+  const step = hftStep;
+  hftFillBar(`bar-${step}`, 100, () => {
+    hftStep++;
 
-  const pct = document.getElementById(`percent-${hftStep}`);
-  pct.textContent = "";                 // no "100%"
-  pct.style.display = "none";           // hide the label
-
-  document.getElementById(`check-${hftStep}`).style.display = 'inline';
-  document.getElementById(`label-${hftStep}`).textContent   = hftStepLabels[hftStep].done;
-
-  /* next step or finish */
-  hftStep++;
-
-  if (hftStep <= 3) {
-    setTimeout(() => hftFillBar(`bar-${hftStep}`, 50, hftShowPopup), 4000);
-  } else {
-    hftShowSteps();
-    setTimeout(() => {
-      document.getElementById('final-button').style.display = 'block';
-    }, 1500);
-  }
+    if (hftStep <= 3) {
+      hftShowSteps();
+      // next step 0→50, then popup
+      // ensure bar is reset to 0 explicitly
+      const nextBar = qs(`bar-${hftStep}`);
+      setPct(nextBar, parseInt(nextBar.getAttribute('data-pct')||'0',10)); // keep current
+      setTimeout(() => hftFillBar(`bar-${hftStep}`, 50, hftShowPopup), 300);
+    } else {
+      hftShowSteps();
+      setTimeout(() => { qs('final-button').style.display = 'block'; }, 300);
+    }
+  }, 20);
 }
+// ensure global for inline onclick
+window.hftHandleResponse = hftHandleResponse;
 
 /* ---------------- INIT (run once) ---------------- */
 function hftRunOnce () {
-  if (window.__hft_started) return;      /* guard against double-init */
+  if (window.__hft_started) return;
   window.__hft_started = true;
+
+  // Initialize all bars to 0% deterministically
+  for (let i = 1; i <= 3; i++) {
+    const bar = qs(`bar-${i}`);
+    if (bar) setPct(bar, 0);
+  }
 
   setTimeout(() => {
     hftShowSteps();
-    hftFillBar('bar-1', 50, () => setTimeout(hftShowPopup, 2000));
-  }, 4000);                              /* delayed start */
+    // Step 1: 0→50 (no jump), then popup
+    hftFillBar('bar-1', 50, () => setTimeout(hftShowPopup, 200));
+  }, 400); // small, reliable delay
 }
 
-/* --------------------------------------------------
-   ① Stand-alone preview  –  DOMContentLoaded
--------------------------------------------------- */
+/* Standalone run */
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(hftRunOnce, 50);
 });
 
-/* --------------------------------------------------
-   ② Multi-screen flow  –  heyflow-screen-view
--------------------------------------------------- */
-const MY_SCREEN = "";   // e.g. "Transformation"
-
+/* Heyflow multi-screen support */
+const MY_SCREEN = ""; // e.g. "Transformación"
 window.addEventListener('heyflow-screen-view', (e) => {
   if (!MY_SCREEN || (e.detail && e.detail.screenName === MY_SCREEN)) {
     hftRunOnce();
   }
 });
 </script>
+
 
 
